@@ -161,20 +161,110 @@ const days = [
 
 const tagColors: Record<string, string> = { COMPUESTO: C.teal, UNILATERAL: C.purple, AISLAMIENTO: C.gold, REHAB: C.green, MOVILIDAD: C.blue };
 
+// ─── PROGRESS TRACKING ────────────────────────────────────────
+const START_DATE = new Date("2026-03-09");
+
+function dateKey(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
+function getDaysBetween(a: Date, b: Date): number {
+  return Math.floor((b.getTime() - a.getTime()) / 86400000);
+}
+
+function loadProgress(): Record<string, Record<string, boolean>> {
+  try {
+    const raw = localStorage.getItem("fitness_progress");
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveProgress(data: Record<string, Record<string, boolean>>) {
+  try { localStorage.setItem("fitness_progress", JSON.stringify(data)); } catch {}
+}
+
+const CHECKS = [
+  { id: "rutina", label: "💪 Hice mi rutina / caminata" },
+  { id: "dieta", label: "🥗 Seguí mi plan de comidas" },
+  { id: "proteina", label: "🥚 Llegué a ~140g de proteína" },
+  { id: "cortisol", label: "🧘 Hice box-breathing al despertar" },
+  { id: "agua", label: "💧 Bebí agua con sal en ayunas" },
+  { id: "pantalla", label: "📵 Sin pantalla 30 min antes de dormir" },
+];
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────
 export default function App() {
   const [section, setSection] = useState("inicio");
   const [activeDay, setActiveDay] = useState<number>(0);
   const [expandedEx, setExpandedEx] = useState<number | null>(null);
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
+  const [progress, setProgress] = useState<Record<string, Record<string, boolean>>>(loadProgress);
+  const [calMonth, setCalMonth] = useState(0); // 0 = mes actual del inicio
   const d = days[activeDay];
+
+  const todayKey = dateKey(new Date());
+
+  function toggleCheck(checkId: string) {
+    const updated = {
+      ...progress,
+      [todayKey]: { ...(progress[todayKey] || {}), [checkId]: !(progress[todayKey]?.[checkId]) }
+    };
+    setProgress(updated);
+    saveProgress(updated);
+  }
+
+  function getDayColor(key: string) {
+    const checks = progress[key];
+    if (!checks) return null;
+    const done = Object.values(checks).filter(Boolean).length;
+    if (done >= 5) return C.green;
+    if (done >= 3) return C.gold;
+    if (done >= 1) return C.coral;
+    return C.dim;
+  }
+
+  // Streak calculator
+  function getStreak(): number {
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i <= 120; i++) {
+      const d2 = new Date(today);
+      d2.setDate(today.getDate() - i);
+      const key = dateKey(d2);
+      const checks = progress[key];
+      const done = checks ? Object.values(checks).filter(Boolean).length : 0;
+      if (done >= 3) streak++;
+      else if (i > 0) break;
+    }
+    return streak;
+  }
+
+  // Calendar grid for 120 days
+  function getCalendarDays() {
+    const allDays = [];
+    for (let i = 0; i < 120; i++) {
+      const d2 = new Date(START_DATE);
+      d2.setDate(START_DATE.getDate() + i);
+      allDays.push(d2);
+    }
+    return allDays;
+  }
+
+  const calDays = getCalendarDays();
+  const todayChecks = progress[todayKey] || {};
+  const todayDone = Object.values(todayChecks).filter(Boolean).length;
+  const streak = getStreak();
+  const totalDaysLogged = Object.keys(progress).filter(k => {
+    const checks = progress[k];
+    return checks && Object.values(checks).filter(Boolean).length >= 3;
+  }).length;
 
   const navItems = [
     { id: "inicio", icon: "🏠", label: "Inicio" },
+    { id: "progreso", icon: "📅", label: "Progreso" },
     { id: "rutina", icon: "💪", label: "Rutina" },
     { id: "dieta", icon: "🥗", label: "Dieta" },
-    { id: "proyecciones", icon: "📈", label: "Metas" },
-    { id: "cortisol", icon: "🧠", label: "Cortisol" },
+    { id: "metas", icon: "📈", label: "Metas" },
   ];
 
   return (
@@ -224,8 +314,8 @@ export default function App() {
               {[
                 { id: "rutina", icon: "💪", title: "Ver rutina de hoy", sub: "5 días · unilateral · zona 2", color: C.teal },
                 { id: "dieta", icon: "🥗", title: "Plan alimentario", sub: `~${totalCals} kcal · ${totalProt}g proteína`, color: C.gold },
-                { id: "proyecciones", icon: "📈", title: "Proyecciones", sub: "30 · 60 · 90 · 120 días", color: C.purple },
-                { id: "cortisol", icon: "🧠", title: "Anti-cortisol", sub: "8 hábitos críticos", color: C.coral },
+                { id: "metas", icon: "📈", title: "Proyecciones", sub: "30 · 60 · 90 · 120 días", color: C.purple },
+                { id: "progreso", icon: "📅", title: "Mi progreso", sub: "Checklist + calendario", color: C.green },
               ].map(({ id, icon, title, sub, color }) => (
                 <div key={id} onClick={() => setSection(id)} style={{
                   background: C.card, border: `1px solid ${color}30`,
@@ -460,8 +550,135 @@ export default function App() {
           </div>
         )}
 
-        {/* ══════════ PROYECCIONES ══════════ */}
-        {section === "proyecciones" && (
+        {/* ══════════ PROGRESO ══════════ */}
+        {section === "progreso" && (
+          <div>
+            {/* Stats row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 }}>
+              {[
+                { label: "Racha actual", val: `${streak}🔥`, color: C.coral },
+                { label: "Días completados", val: totalDaysLogged, color: C.green },
+                { label: "Hoy", val: `${todayDone}/6`, color: todayDone >= 5 ? C.green : todayDone >= 3 ? C.gold : C.muted },
+              ].map(({ label, val, color }) => (
+                <div key={label} style={{ background: C.card, border: `1px solid ${color}30`, borderRadius: 10, padding: "12px 8px", textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color }}>{val}</div>
+                  <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Today checklist */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 12, letterSpacing: 1 }}>
+                ✅ Checklist de Hoy
+              </div>
+              {CHECKS.map(({ id, label }) => {
+                const checked = todayChecks[id] || false;
+                return (
+                  <div
+                    key={id}
+                    onClick={() => toggleCheck(id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "11px 0", borderBottom: `1px solid ${C.dim}`,
+                      cursor: "pointer", transition: "opacity 0.15s",
+                    }}
+                  >
+                    <div style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      background: checked ? C.green : "transparent",
+                      border: `2px solid ${checked ? C.green : C.muted}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "all 0.2s",
+                    }}>
+                      {checked && <span style={{ fontSize: 12, color: C.bg, fontWeight: 800 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 13, color: checked ? C.text : C.muted, textDecoration: checked ? "none" : "none", flex: 1 }}>
+                      {label}
+                    </span>
+                  </div>
+                );
+              })}
+              {todayDone === 6 && (
+                <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.green, fontWeight: 700 }}>
+                  🎉 ¡Día perfecto! Completaste todo.
+                </div>
+              )}
+            </div>
+
+            {/* Legend */}
+            <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+              {[
+                { color: C.green, label: "5–6 ✓ Excelente" },
+                { color: C.gold, label: "3–4 ✓ Bien" },
+                { color: C.coral, label: "1–2 ✓ Parcial" },
+                { color: C.dim, label: "0 ✓ Sin registro" },
+              ].map(({ color, label }) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
+                  <span style={{ fontSize: 10, color: C.muted }}>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar grid — 120 days */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 12 }}>
+                📅 120 Días · 9 Mar → 6 Jul 2026
+              </div>
+
+              {/* Month labels */}
+              {["Mar", "Abr", "May", "Jun", "Jul"].map((month, mi) => {
+                const monthDays = calDays.filter(d2 => {
+                  const m = d2.toLocaleString("es", { month: "short" });
+                  return m.toLowerCase().startsWith(month.toLowerCase());
+                });
+                if (monthDays.length === 0) return null;
+                return (
+                  <div key={month} style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>
+                      {month}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                      {/* Day of week headers */}
+                      {mi === 0 && ["L","M","X","J","V","S","D"].map(dw => (
+                        <div key={dw} style={{ fontSize: 8, color: C.muted, textAlign: "center", paddingBottom: 4 }}>{dw}</div>
+                      ))}
+                      {/* Offset for first month */}
+                      {mi === 0 && Array.from({ length: 0 }).map((_, i) => <div key={`off${i}`} />)}
+                      {monthDays.map(date => {
+                        const key = dateKey(date);
+                        const isToday = key === todayKey;
+                        const isFuture = date > new Date();
+                        const color = getDayColor(key);
+                        const dayNum = date.getDate();
+                        return (
+                          <div
+                            key={key}
+                            style={{
+                              aspectRatio: "1",
+                              borderRadius: 4,
+                              background: color || (isFuture ? "transparent" : "#1a1a1a"),
+                              border: isToday ? `2px solid ${C.gold}` : `1px solid ${isFuture ? C.dim : color || C.dim}`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 9, color: color ? C.bg : C.muted,
+                              fontWeight: isToday ? 800 : 400,
+                            }}
+                          >
+                            {dayNum}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════ PROYECCIONES (metas) ══════════ */}
+        {section === "metas" && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginBottom: 16 }}>
               {milestones.map(m => (
