@@ -340,10 +340,13 @@ export default function App() {
                     <div style={{ fontSize: 10, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>{month}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
                       {mi === 0 && ["L","M","X","J","V","S","D"].map(dw => <div key={dw} style={{ fontSize: 8, color: C.muted, textAlign: "center", paddingBottom: 4 }}>{dw}</div>)}
+                      {mi === 0 && Array.from({ length: (START_DATE.getDay() + 6) % 7 }).map((_, i) => <div key={`off${i}`} />)}
                       {mDays.map(date => {
                         const key = dateKey(date);
                         const isToday = key === todayKey;
-                        const isFuture = date > now;
+                        const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        const isPast = date < todayMidnight;
+                        const isFuture = !isToday && !isPast;
                         const col = getDayColor(key);
                         return (
                           <div key={key} style={{ aspectRatio: "1", borderRadius: 4, background: col || (isFuture ? "transparent" : darkMode ? "#1a1a1a" : "#eee"), border: isToday ? `2px solid ${C.gold}` : `1px solid ${isFuture ? C.dim : col || C.dim}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: col ? "#fff" : C.muted, fontWeight: isToday ? 800 : 400 }}>
