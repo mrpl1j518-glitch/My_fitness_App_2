@@ -173,6 +173,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try { return localStorage.getItem("fitness_theme") !== "light"; } catch { return true; }
   });
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const C = darkMode ? DARK : LIGHT;
   const gc = (key: string): string => (C as Record<string, string>)[key] || C.muted;
@@ -195,8 +196,9 @@ export default function App() {
     { label: "120D", color: C.coral, ...project(120) },
   ];
 
-  function toggleCheck(id: string) {
-    const updated = { ...progress, [todayKey]: { ...(progress[todayKey] || {}), [id]: !(progress[todayKey]?.[id]) } };
+  function toggleCheck(id: string, dayKey?: string) {
+    const key = dayKey || todayKey;
+    const updated = { ...progress, [key]: { ...(progress[key] || {}), [id]: !(progress[key]?.[id]) } };
     setProgress(updated);
     saveProgress(updated);
   }
@@ -307,21 +309,44 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 12 }}>✅ Checklist de Hoy</div>
-              {CHECKS.map(({ id, label }) => {
-                const checked = todayChecks[id] || false;
-                return (
-                  <div key={id} onClick={() => toggleCheck(id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
-                    <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.green : "transparent", border: `2px solid ${checked ? C.green : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-                      {checked && <span style={{ fontSize: 12, color: darkMode ? "#0D0D0D" : "#fff", fontWeight: 800 }}>✓</span>}
+
+            {/* Checklist — hoy o día seleccionado */}
+            {(() => {
+              const activeKey = selectedDay || todayKey;
+              const activeChecks = progress[activeKey] || {};
+              const activeDone = Object.values(activeChecks).filter(Boolean).length;
+              const isEditingPast = selectedDay && selectedDay !== todayKey;
+              const displayDate = isEditingPast
+                ? new Date(activeKey + "T12:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })
+                : "Hoy";
+              return (
+                <div style={{ background: C.card, border: `1px solid ${isEditingPast ? C.gold : C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: isEditingPast ? C.gold : C.gold }}>
+                      ✅ Checklist — <span style={{ textTransform: "capitalize" }}>{displayDate}</span>
                     </div>
-                    <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
+                    {isEditingPast && (
+                      <button onClick={() => setSelectedDay(null)} style={{ background: "none", border: `1px solid ${C.muted}`, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: C.muted, cursor: "pointer" }}>
+                        ← Hoy
+                      </button>
+                    )}
                   </div>
-                );
-              })}
-              {todayDone === 6 && <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.green, fontWeight: 700 }}>🎉 ¡Día perfecto! Completaste todo.</div>}
-            </div>
+                  {CHECKS.map(({ id, label }) => {
+                    const checked = activeChecks[id] || false;
+                    return (
+                      <div key={id} onClick={() => toggleCheck(id, activeKey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.green : "transparent", border: `2px solid ${checked ? C.green : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                          {checked && <span style={{ fontSize: 12, color: darkMode ? "#0D0D0D" : "#fff", fontWeight: 800 }}>✓</span>}
+                        </div>
+                        <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
+                      </div>
+                    );
+                  })}
+                  {activeDone === 6 && <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.green, fontWeight: 700 }}>🎉 ¡Día perfecto!</div>}
+                </div>
+              );
+            })()}
+
             <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
               {[{ color: C.green, label: "5–6 ✓ Excelente" }, { color: C.gold, label: "3–4 ✓ Bien" }, { color: C.coral, label: "1–2 ✓ Parcial" }, { color: C.dim, label: "0 Sin registro" }].map(({ color, label }) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -330,8 +355,10 @@ export default function App() {
                 </div>
               ))}
             </div>
+
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 12 }}>📅 120 Días · 9 Mar → 6 Jul 2026</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4 }}>📅 120 Días · 9 Mar → 6 Jul 2026</div>
+              <div style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>Toca un día pasado para editar su checklist</div>
               {["Mar", "Abr", "May", "Jun", "Jul"].map((month, mi) => {
                 const mDays = calDays.filter(d2 => d2.toLocaleString("es", { month: "short" }).toLowerCase().startsWith(month.toLowerCase()));
                 if (!mDays.length) return null;
@@ -347,9 +374,21 @@ export default function App() {
                         const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                         const isPast = date < todayMidnight;
                         const isFuture = !isToday && !isPast;
+                        const isSelected = key === selectedDay;
                         const col = getDayColor(key);
                         return (
-                          <div key={key} style={{ aspectRatio: "1", borderRadius: 4, background: col || (isFuture ? "transparent" : darkMode ? "#1a1a1a" : "#eee"), border: isToday ? `2px solid ${C.gold}` : `1px solid ${isFuture ? C.dim : col || C.dim}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: col ? "#fff" : C.muted, fontWeight: isToday ? 800 : 400 }}>
+                          <div key={key}
+                            onClick={() => !isFuture && setSelectedDay(isSelected ? null : key)}
+                            style={{
+                              aspectRatio: "1", borderRadius: 4,
+                              background: col || (isFuture ? "transparent" : darkMode ? "#1a1a1a" : "#eee"),
+                              border: isSelected ? `2px solid ${C.teal}` : isToday ? `2px solid ${C.gold}` : `1px solid ${isFuture ? C.dim : col || C.dim}`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 9, color: col ? "#fff" : C.muted,
+                              fontWeight: isToday || isSelected ? 800 : 400,
+                              cursor: isFuture ? "default" : "pointer",
+                              opacity: isFuture ? 0.4 : 1,
+                            }}>
                             {date.getDate()}
                           </div>
                         );
