@@ -1,11 +1,29 @@
 import { useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-const C = {
+// ─── GOOGLE FONT (Inter — moderna y legible) ──────────────────
+const fontLink = document.createElement("link");
+fontLink.rel = "stylesheet";
+fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap";
+document.head.appendChild(fontLink);
+
+// ─── THEMES ───────────────────────────────────────────────────
+const DARK = {
   bg: "#0D0D0D", card: "#141414", border: "#222",
-  text: "#F0EAD6", muted: "#666", dim: "#333",
+  text: "#F0EAD6", muted: "#777", dim: "#2a2a2a",
   gold: "#D4A853", teal: "#3EBFAA", red: "#E05555",
   blue: "#5B8FD4", purple: "#9B72CF", green: "#5BAD7F", coral: "#E07055",
+  headerBg: "linear-gradient(135deg, #141414 0%, #0F2040 100%)",
+  navBg: "#0D0D0DDD",
+};
+
+const LIGHT = {
+  bg: "#F5F5F0", card: "#FFFFFF", border: "#E0DDD5",
+  text: "#1A1A1A", muted: "#888", dim: "#E8E5DE",
+  gold: "#B8882A", teal: "#2A9E8C", red: "#C44040",
+  blue: "#3A6DB0", purple: "#7A52AF", green: "#3A8D5F", coral: "#C05040",
+  headerBg: "linear-gradient(135deg, #1A1A2E 0%, #0F2040 100%)",
+  navBg: "#F5F5F0EE",
 };
 
 // ─── PROYECCIONES ─────────────────────────────────────────────
@@ -159,7 +177,7 @@ const days = [
   },
 ];
 
-const tagColors: Record<string, string> = { COMPUESTO: C.teal, UNILATERAL: C.purple, AISLAMIENTO: C.gold, REHAB: C.green, MOVILIDAD: C.blue };
+const tagColors: Record<string, string> = { COMPUESTO: DARK.teal, UNILATERAL: DARK.purple, AISLAMIENTO: DARK.gold, REHAB: DARK.green, MOVILIDAD: DARK.blue };
 
 // ─── PROGRESS TRACKING ────────────────────────────────────────
 const START_DATE = new Date("2026-03-09");
@@ -199,10 +217,24 @@ export default function App() {
   const [expandedEx, setExpandedEx] = useState<number | null>(null);
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [progress, setProgress] = useState<Record<string, Record<string, boolean>>>(loadProgress);
-  const [calMonth, setCalMonth] = useState(0); // 0 = mes actual del inicio
+  const [calMonth, setCalMonth] = useState(0);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try { return localStorage.getItem("fitness_theme") !== "light"; } catch { return true; }
+  });
+
+  const C = darkMode ? DARK : LIGHT;
+
+  function toggleTheme() {
+    const next = !darkMode;
+    setDarkMode(next);
+    try { localStorage.setItem("fitness_theme", next ? "dark" : "light"); } catch {}
+  }
+
   const d = days[activeDay];
 
-  const todayKey = dateKey(new Date());
+  // Timezone fix — use device local date
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
   function toggleCheck(checkId: string) {
     const updated = {
@@ -268,13 +300,24 @@ export default function App() {
   ];
 
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Georgia', serif", color: C.text, maxWidth: 430, margin: "0 auto", paddingBottom: 70 }}>
+    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: C.text, maxWidth: 430, margin: "0 auto", paddingBottom: 70, transition: "background 0.3s, color 0.3s" }}>
 
       {/* ── HEADER ── */}
-      <div style={{ background: `linear-gradient(135deg, #141414 0%, #0F2040 100%)`, padding: "22px 18px 16px", borderBottom: `2px solid ${C.gold}` }}>
-        <p style={{ margin: "0 0 2px", fontSize: 9, letterSpacing: 4, color: C.gold, textTransform: "uppercase" }}>Reinicio · 9 Marzo 2026</p>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>Mi Plan de Transformación</h1>
-        <p style={{ margin: "4px 0 0", fontSize: 11, color: C.muted }}>37 años · 158 cm · 70.1 kg · 33% grasa</p>
+      <div style={{ background: C.headerBg, padding: "22px 18px 16px", borderBottom: `2px solid ${C.gold}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <p style={{ margin: "0 0 2px", fontSize: 9, letterSpacing: 4, color: C.gold, textTransform: "uppercase" }}>Reinicio · 9 Marzo 2026</p>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#F0EAD6" }}>Mi Plan de Transformación</h1>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#888" }}>37 años · 158 cm · 70.1 kg · 33% grasa</p>
+          </div>
+          <button onClick={toggleTheme} style={{
+            background: "none", border: `1px solid ${C.gold}44`, borderRadius: 20,
+            padding: "6px 10px", cursor: "pointer", fontSize: 16, marginTop: 4,
+            color: C.gold, flexShrink: 0,
+          }}>
+            {darkMode ? "☀️" : "🌙"}
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: "16px" }}>
@@ -786,10 +829,10 @@ export default function App() {
       <div style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "100%", maxWidth: 430,
-        background: "#0D0D0DDD", backdropFilter: "blur(12px)",
+        background: C.navBg, backdropFilter: "blur(12px)",
         borderTop: `1px solid ${C.border}`,
         display: "flex", justifyContent: "space-around", padding: "8px 0 10px",
-        zIndex: 100,
+        zIndex: 100, transition: "background 0.3s",
       }}>
         {navItems.map(({ id, icon, label }) => (
           <button key={id} onClick={() => setSection(id)} style={{
