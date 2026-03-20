@@ -155,14 +155,50 @@ function saveProgress(data: Record<string, Record<string, boolean>>) {
   try { localStorage.setItem("fitness_progress", JSON.stringify(data)); } catch {}
 }
 
-const CHECKS = [
-  { id: "rutina", label: "💪 Hice mi rutina / caminata" },
-  { id: "dieta", label: "🥗 Seguí mi plan de comidas" },
-  { id: "proteina", label: "🥚 Llegué a ~140g de proteína" },
-  { id: "cortisol", label: "🧘 Hice box-breathing al despertar" },
-  { id: "agua", label: "💧 Bebí agua con sal en ayunas" },
-  { id: "pantalla", label: "📵 Sin pantalla 30 min antes de dormir" },
+const MODES = [
+  { id: "optimo", label: "🟢 Óptimo", sublabel: "Día ideal", color: "green" },
+  { id: "minimo", label: "💜 Mínimo viable", sublabel: "Día ocupado", color: "purple" },
+  { id: "supervivencia", label: "⭐ Supervivencia", sublabel: "Modo deadline", color: "gold" },
 ];
+
+const CHECKS_BY_MODE: Record<string, { id: string; label: string }[]> = {
+  optimo: [
+    { id: "rutina", label: "💪 Moví mi cuerpo 30+ min" },
+    { id: "dieta", label: "🥗 Seguí mi plan de comidas" },
+    { id: "proteina", label: "🥚 Llegué a ~140g de proteína" },
+    { id: "cortisol", label: "🧘 Hice box-breathing al despertar" },
+    { id: "agua", label: "💧 Bebí agua con sal en ayunas" },
+    { id: "pantalla", label: "📵 Sin pantalla 30 min antes de dormir" },
+    { id: "devocional", label: "🙏 15 min devocional" },
+    { id: "lectura", label: "📖 30 min lectura" },
+    { id: "sueno", label: "😴 Dormí 7+ horas" },
+  ],
+  minimo: [
+    { id: "rutina", label: "💪 Moví mi cuerpo 15 min" },
+    { id: "dieta", label: "🥗 Comí bien sin saltarme comidas" },
+    { id: "proteina", label: "🥚 Llegué a ~100g de proteína" },
+    { id: "agua", label: "💧 Bebí suficiente agua" },
+    { id: "devocional", label: "🙏 15 min devocional" },
+    { id: "ingles", label: "🇬🇧 15 min inglés práctico" },
+    { id: "sueno", label: "😴 Dormí 6+ horas" },
+  ],
+  supervivencia: [
+    { id: "dieta", label: "🥗 Comí algo nutritivo" },
+    { id: "agua", label: "💧 Bebí agua" },
+    { id: "sueno", label: "😴 Dormí aunque sea 5 horas" },
+    { id: "devocional", label: "🙏 5 min devocional" },
+  ],
+};
+
+// Para compatibilidad con datos anteriores (sin modo)
+const CHECKS = CHECKS_BY_MODE.optimo;
+
+function loadModes(): Record<string, string> {
+  try { const r = localStorage.getItem("fitness_modes"); return r ? JSON.parse(r) : {}; } catch { return {}; }
+}
+function saveModes(data: Record<string, string>) {
+  try { localStorage.setItem("fitness_modes", JSON.stringify(data)); } catch {}
+}
 
 const STOPPERS = [
   { id: "trabajo", label: "💼 Exceso de trabajo / deadline" },
@@ -190,6 +226,7 @@ export default function App() {
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [progress, setProgress] = useState<Record<string, Record<string, boolean>>>(loadProgress);
   const [stoppers, setStoppers] = useState<Record<string, Record<string, boolean>>>(loadStoppers);
+  const [modes, setModes] = useState<Record<string, string>>(loadModes);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try { return localStorage.getItem("fitness_theme") !== "light"; } catch { return true; }
   });
@@ -230,13 +267,56 @@ export default function App() {
     saveStoppers(updated);
   }
 
+  function setDayMode(modeId: string, dayKey?: string) {
+    const key = dayKey || todayKey;
+    // Reset checks when changing mode
+    const updatedModes = { ...modes, [key]: modeId };
+    const updatedProgress = { ...progress, [key]: {} };
+    setModes(updatedModes);
+    saveModes(updatedModes);
+    setProgress(updatedProgress);
+    saveProgress(updatedProgress);
+  }
+
+  function getDayChecks(key: string) {
+    const mode = modes[key] || "optimo";
+    return CHECKS_BY_MODE[mode] || CHECKS_BY_MODE.optimo;
+  }
+
+  function isDayComplete(key: string): boolean {
+    const checks = progress[key];
+    if (!checks) return false;
+    const dayChecks = getDayChecks(key);
+    return dayChecks.every(c => checks[c.id]);
+  }
+
+  function getDayCompletionRatio(key: string): number {
+    const checks = progress[key];
+    if (!checks) return 0;
+    const dayChecks = getDayChecks(key);
+    const done = dayChecks.filter(c => checks[c.id]).length;
+    return done / dayChecks.length;
+  }
+
   function getDayColor(key: string) {
     const checks = progress[key];
-    if (!checks) return null;
-    const done = Object.values(checks).filter(Boolean).length;
-    if (done >= 5) return C.green;
-    if (done >= 3) return C.gold;
-    if (done >= 1) return C.coral;
+    if (!checks || !Object.values(checks).some(Boolean)) return null;
+    const mode = modes[key] || "optimo";
+    const ratio = getDayCompletionRatio(key);
+    if (mode === "optimo") {
+      if (ratio >= 1) return C.green;
+      if (ratio >= 0.6) return C.gold;
+      if (ratio > 0) return C.coral;
+    }
+    if (mode === "minimo") {
+      if (ratio >= 1) return C.purple;
+      if (ratio >= 0.6) return C.gold;
+      if (ratio > 0) return C.coral;
+    }
+    if (mode === "supervivencia") {
+      if (ratio >= 1) return C.gold;
+      if (ratio > 0) return C.coral;
+    }
     return C.dim;
   }
 
@@ -244,18 +324,21 @@ export default function App() {
     let s = 0;
     for (let i = 0; i <= 120; i++) {
       const d2 = new Date(now); d2.setDate(now.getDate() - i);
-      const checks = progress[dateKey(d2)];
-      const done = checks ? Object.values(checks).filter(Boolean).length : 0;
-      if (done >= 3) s++; else if (i > 0) break;
+      const key = dateKey(d2);
+      if (isDayComplete(key)) s++;
+      else if (i > 0) break;
     }
     return s;
   }
 
   const calDays: Date[] = Array.from({ length: 120 }, (_, i) => { const d2 = new Date(START_DATE); d2.setDate(START_DATE.getDate() + i); return d2; });
+  const todayMode = modes[todayKey] || "optimo";
   const todayChecks = progress[todayKey] || {};
-  const todayDone = Object.values(todayChecks).filter(Boolean).length;
+  const todayModeChecks = CHECKS_BY_MODE[todayMode];
+  const todayDone = todayModeChecks.filter(c => todayChecks[c.id]).length;
+  const todayTotal = todayModeChecks.length;
   const streak = getStreak();
-  const totalDone = Object.keys(progress).filter(k => { const c = progress[k]; return c && Object.values(c).filter(Boolean).length >= 3; }).length;
+  const totalDone = calDays.filter(d2 => isDayComplete(dateKey(d2))).length;
 
   const navItems = [
     { id: "inicio", icon: "🏠", label: "Inicio" },
@@ -329,7 +412,7 @@ export default function App() {
         {section === "progreso" && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 }}>
-              {[{ label: "Racha actual", val: `${streak}🔥`, color: C.coral }, { label: "Días completados", val: totalDone, color: C.green }, { label: "Hoy", val: `${todayDone}/6`, color: todayDone >= 5 ? C.green : todayDone >= 3 ? C.gold : C.muted }].map(({ label, val, color }) => (
+              {[{ label: "Racha actual", val: `${streak}🔥`, color: C.coral }, { label: "Días completos", val: totalDone, color: C.green }, { label: "Hoy", val: `${todayDone}/${todayTotal}`, color: todayDone >= todayTotal ? C.green : todayDone >= Math.ceil(todayTotal/2) ? C.gold : C.muted }].map(({ label, val, color }) => (
                 <div key={label} style={{ background: C.card, border: `1px solid ${color}30`, borderRadius: 10, padding: "12px 8px", textAlign: "center" }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color }}>{val}</div>
                   <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>{label}</div>
@@ -342,19 +425,45 @@ export default function App() {
               const activeKey = selectedDay || todayKey;
               const activeChecks = progress[activeKey] || {};
               const activeStoppers = stoppers[activeKey] || {};
-              const activeDone = Object.values(activeChecks).filter(Boolean).length;
+              const activeMode = modes[activeKey] || "optimo";
+              const activeModeChecks = CHECKS_BY_MODE[activeMode];
+              const activeDone = activeModeChecks.filter(c => activeChecks[c.id]).length;
+              const activeTotal = activeModeChecks.length;
               const activeStoppersDone = Object.values(activeStoppers).filter(Boolean).length;
               const isEditingPast = selectedDay && selectedDay !== todayKey;
               const displayDate = isEditingPast
                 ? new Date(activeKey + "T12:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })
                 : "Hoy";
+              const activeModeObj = MODES.find(m => m.id === activeMode)!;
+              const activeModeColor = gc(activeModeObj.color);
+
               return (
                 <div>
+                  {/* Selector de modo */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 8, letterSpacing: 1 }}>¿QUÉ MODO ES HOY?</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                      {MODES.map(m => {
+                        const mColor = gc(m.color);
+                        const isActive = activeMode === m.id;
+                        return (
+                          <div key={m.id} onClick={() => setDayMode(m.id, activeKey)} style={{ background: isActive ? `${mColor}20` : C.card, border: `2px solid ${isActive ? mColor : C.border}`, borderRadius: 10, padding: "10px 6px", cursor: "pointer", textAlign: "center", transition: "all 0.2s" }}>
+                            <div style={{ fontSize: 16, marginBottom: 2 }}>{m.label.split(" ")[0]}</div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: isActive ? mColor : C.muted, lineHeight: 1.3 }}>{m.sublabel}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Hábitos */}
-                  <div style={{ background: C.card, border: `1px solid ${isEditingPast ? C.gold : C.border}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                  <div style={{ background: C.card, border: `2px solid ${activeModeColor}40`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: C.gold }}>
-                        ✅ Hábitos — <span style={{ textTransform: "capitalize" }}>{displayDate}</span>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: activeModeColor }}>
+                          ✅ Hábitos — <span style={{ textTransform: "capitalize" }}>{displayDate}</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{activeModeObj.label} · {activeDone}/{activeTotal} completados</div>
                       </div>
                       {isEditingPast && (
                         <button onClick={() => setSelectedDay(null)} style={{ background: "none", border: `1px solid ${C.muted}`, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: C.muted, cursor: "pointer" }}>
@@ -362,29 +471,33 @@ export default function App() {
                         </button>
                       )}
                     </div>
-                    {CHECKS.map(({ id, label }) => {
+                    {activeModeChecks.map(({ id, label }) => {
                       const checked = activeChecks[id] || false;
                       return (
                         <div key={id} onClick={() => toggleCheck(id, activeKey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
-                          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.green : "transparent", border: `2px solid ${checked ? C.green : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? activeModeColor : "transparent", border: `2px solid ${checked ? activeModeColor : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
                             {checked && <span style={{ fontSize: 12, color: darkMode ? "#0D0D0D" : "#fff", fontWeight: 800 }}>✓</span>}
                           </div>
                           <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
                         </div>
                       );
                     })}
-                    {activeDone === 6 && <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.green, fontWeight: 700 }}>🎉 ¡Día perfecto!</div>}
+                    {activeDone === activeTotal && (
+                      <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: activeModeColor, fontWeight: 700 }}>
+                        {activeMode === "optimo" ? "🌟 ¡Día perfecto!" : activeMode === "minimo" ? "💜 ¡Día mínimo completado!" : "⭐ ¡Sobreviviste con honor!"}
+                      </div>
+                    )}
                   </div>
 
                   {/* Stoppers */}
-                  <div style={{ background: C.card, border: `1px solid ${activeStoppersDone > 0 ? C.red + "50" : C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 4 }}>🚫 ¿Qué te detuvo hoy?</div>
-                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>Marca todos los que apliquen — sin juicio, solo datos.</div>
+                  <div style={{ background: C.card, border: `1px solid ${activeStoppersDone > 0 ? C.coral + "50" : C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.coral, marginBottom: 4 }}>🚫 ¿Qué te detuvo hoy?</div>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>Sin juicio — solo datos para entender tus patrones.</div>
                     {STOPPERS.map(({ id, label }) => {
                       const checked = activeStoppers[id] || false;
                       return (
                         <div key={id} onClick={() => toggleStopper(id, activeKey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
-                          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.red : "transparent", border: `2px solid ${checked ? C.red : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.coral : "transparent", border: `2px solid ${checked ? C.coral : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
                             {checked && <span style={{ fontSize: 12, color: "#fff", fontWeight: 800 }}>✗</span>}
                           </div>
                           <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
@@ -398,7 +511,7 @@ export default function App() {
             })()}
 
             <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-              {[{ color: C.green, label: "5–6 ✓ Excelente" }, { color: C.gold, label: "3–4 ✓ Bien" }, { color: C.coral, label: "1–2 ✓ Parcial" }, { color: C.dim, label: "0 Sin registro" }].map(({ color, label }) => (
+              {[{ color: C.green, label: "🟢 Óptimo completo" }, { color: C.purple, label: "💜 Mínimo completo" }, { color: C.gold, label: "⭐ Supervivencia" }, { color: C.coral, label: "Parcial" }].map(({ color, label }) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
                   <span style={{ fontSize: 10, color: C.muted }}>{label}</span>
@@ -441,6 +554,7 @@ export default function App() {
                   exportDate: new Date().toISOString(),
                   habitos: progress,
                   stoppers: stoppers,
+                  modos: modes,
                 };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
                 const url = URL.createObjectURL(blob);
