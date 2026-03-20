@@ -164,12 +164,32 @@ const CHECKS = [
   { id: "pantalla", label: "📵 Sin pantalla 30 min antes de dormir" },
 ];
 
+const STOPPERS = [
+  { id: "trabajo", label: "💼 Exceso de trabajo / deadline" },
+  { id: "procrastinacion", label: "😶 Procrastinación" },
+  { id: "motivacion", label: "😐 Falta de motivación" },
+  { id: "rumiacion", label: "🌀 Pensamientos rumiadores" },
+  { id: "foco", label: "🌫️ Falta de foco" },
+  { id: "rrss", label: "📱 Exceso de redes sociales" },
+  { id: "agotamiento", label: "😔 Agotamiento físico" },
+  { id: "externo", label: "🏠 Factores externos / imprevistos" },
+  { id: "emocional", label: "😤 Estado emocional" },
+];
+
+function loadStoppers(): Record<string, Record<string, boolean>> {
+  try { const r = localStorage.getItem("fitness_stoppers"); return r ? JSON.parse(r) : {}; } catch { return {}; }
+}
+function saveStoppers(data: Record<string, Record<string, boolean>>) {
+  try { localStorage.setItem("fitness_stoppers", JSON.stringify(data)); } catch {}
+}
+
 export default function App() {
   const [section, setSection] = useState("inicio");
   const [activeDay, setActiveDay] = useState<number>(0);
   const [expandedEx, setExpandedEx] = useState<number | null>(null);
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [progress, setProgress] = useState<Record<string, Record<string, boolean>>>(loadProgress);
+  const [stoppers, setStoppers] = useState<Record<string, Record<string, boolean>>>(loadStoppers);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try { return localStorage.getItem("fitness_theme") !== "light"; } catch { return true; }
   });
@@ -201,6 +221,13 @@ export default function App() {
     const updated = { ...progress, [key]: { ...(progress[key] || {}), [id]: !(progress[key]?.[id]) } };
     setProgress(updated);
     saveProgress(updated);
+  }
+
+  function toggleStopper(id: string, dayKey?: string) {
+    const key = dayKey || todayKey;
+    const updated = { ...stoppers, [key]: { ...(stoppers[key] || {}), [id]: !(stoppers[key]?.[id]) } };
+    setStoppers(updated);
+    saveStoppers(updated);
   }
 
   function getDayColor(key: string) {
@@ -314,35 +341,58 @@ export default function App() {
             {(() => {
               const activeKey = selectedDay || todayKey;
               const activeChecks = progress[activeKey] || {};
+              const activeStoppers = stoppers[activeKey] || {};
               const activeDone = Object.values(activeChecks).filter(Boolean).length;
+              const activeStoppersDone = Object.values(activeStoppers).filter(Boolean).length;
               const isEditingPast = selectedDay && selectedDay !== todayKey;
               const displayDate = isEditingPast
                 ? new Date(activeKey + "T12:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })
                 : "Hoy";
               return (
-                <div style={{ background: C.card, border: `1px solid ${isEditingPast ? C.gold : C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: isEditingPast ? C.gold : C.gold }}>
-                      ✅ Checklist — <span style={{ textTransform: "capitalize" }}>{displayDate}</span>
-                    </div>
-                    {isEditingPast && (
-                      <button onClick={() => setSelectedDay(null)} style={{ background: "none", border: `1px solid ${C.muted}`, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: C.muted, cursor: "pointer" }}>
-                        ← Hoy
-                      </button>
-                    )}
-                  </div>
-                  {CHECKS.map(({ id, label }) => {
-                    const checked = activeChecks[id] || false;
-                    return (
-                      <div key={id} onClick={() => toggleCheck(id, activeKey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.green : "transparent", border: `2px solid ${checked ? C.green : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-                          {checked && <span style={{ fontSize: 12, color: darkMode ? "#0D0D0D" : "#fff", fontWeight: 800 }}>✓</span>}
-                        </div>
-                        <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
+                <div>
+                  {/* Hábitos */}
+                  <div style={{ background: C.card, border: `1px solid ${isEditingPast ? C.gold : C.border}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.gold }}>
+                        ✅ Hábitos — <span style={{ textTransform: "capitalize" }}>{displayDate}</span>
                       </div>
-                    );
-                  })}
-                  {activeDone === 6 && <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.green, fontWeight: 700 }}>🎉 ¡Día perfecto!</div>}
+                      {isEditingPast && (
+                        <button onClick={() => setSelectedDay(null)} style={{ background: "none", border: `1px solid ${C.muted}`, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: C.muted, cursor: "pointer" }}>
+                          ← Hoy
+                        </button>
+                      )}
+                    </div>
+                    {CHECKS.map(({ id, label }) => {
+                      const checked = activeChecks[id] || false;
+                      return (
+                        <div key={id} onClick={() => toggleCheck(id, activeKey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
+                          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.green : "transparent", border: `2px solid ${checked ? C.green : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                            {checked && <span style={{ fontSize: 12, color: darkMode ? "#0D0D0D" : "#fff", fontWeight: 800 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
+                        </div>
+                      );
+                    })}
+                    {activeDone === 6 && <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: C.green, fontWeight: 700 }}>🎉 ¡Día perfecto!</div>}
+                  </div>
+
+                  {/* Stoppers */}
+                  <div style={{ background: C.card, border: `1px solid ${activeStoppersDone > 0 ? C.red + "50" : C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 4 }}>🚫 ¿Qué te detuvo hoy?</div>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>Marca todos los que apliquen — sin juicio, solo datos.</div>
+                    {STOPPERS.map(({ id, label }) => {
+                      const checked = activeStoppers[id] || false;
+                      return (
+                        <div key={id} onClick={() => toggleStopper(id, activeKey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.dim}`, cursor: "pointer" }}>
+                          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: checked ? C.red : "transparent", border: `2px solid ${checked ? C.red : C.muted}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                            {checked && <span style={{ fontSize: 12, color: "#fff", fontWeight: 800 }}>✗</span>}
+                          </div>
+                          <span style={{ fontSize: 13, color: checked ? C.text : C.muted, flex: 1 }}>{label}</span>
+                        </div>
+                      );
+                    })}
+                    {activeStoppersDone === 0 && <div style={{ marginTop: 12, textAlign: "center", fontSize: 11, color: C.green }}>✨ Sin stoppers registrados este día.</div>}
+                  </div>
                 </div>
               );
             })()}
@@ -356,9 +406,128 @@ export default function App() {
               ))}
             </div>
 
+            {/* ── ANALYTICS ── */}
+            {(() => {
+              // Calcular top stoppers
+              const stopperCount: Record<string, number> = {};
+              STOPPERS.forEach(s => { stopperCount[s.id] = 0; });
+              Object.values(stoppers).forEach(dayS => {
+                Object.entries(dayS).forEach(([id, val]) => { if (val) stopperCount[id] = (stopperCount[id] || 0) + 1; });
+              });
+              const topStoppers = STOPPERS.map(s => ({ ...s, count: stopperCount[s.id] || 0 })).filter(s => s.count > 0).sort((a, b) => b.count - a.count).slice(0, 3);
+
+              // Hábito que más falla
+              const habitFail: Record<string, number> = {};
+              CHECKS.forEach(c => { habitFail[c.id] = 0; });
+              calDays.forEach(date => {
+                const key = dateKey(date);
+                const checks = progress[key];
+                if (checks) {
+                  CHECKS.forEach(c => { if (!checks[c.id]) habitFail[c.id]++; });
+                }
+              });
+              const topFailHabit = CHECKS.map(c => ({ ...c, fails: habitFail[c.id] || 0 })).sort((a, b) => b.fails - a.fails)[0];
+
+              // Días con datos
+              const daysWithData = Object.keys(progress).filter(k => {
+                const c = progress[k]; return c && Object.values(c).some(Boolean);
+              }).length;
+
+              const hasData = daysWithData > 0;
+
+              // Exportar JSON
+              function exportJSON() {
+                const data = {
+                  exportDate: new Date().toISOString(),
+                  habitos: progress,
+                  stoppers: stoppers,
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `mi-progreso-${todayKey}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }
+
+              return (
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.purple }}>📊 Mis Patrones</div>
+                    <button onClick={exportJSON} style={{ background: `${C.purple}20`, border: `1px solid ${C.purple}40`, borderRadius: 8, padding: "5px 10px", fontSize: 10, color: C.purple, cursor: "pointer", fontWeight: 700 }}>
+                      ⬇️ Exportar JSON
+                    </button>
+                  </div>
+
+                  {!hasData ? (
+                    <div style={{ fontSize: 11, color: C.muted, textAlign: "center", padding: "12px 0" }}>
+                      Registra algunos días para ver tus patrones 🌱
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Días registrados */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+                        <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}25`, borderRadius: 8, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: C.green }}>{daysWithData}</div>
+                          <div style={{ fontSize: 9, color: C.muted }}>días registrados</div>
+                        </div>
+                        <div style={{ background: `${C.coral}12`, border: `1px solid ${C.coral}25`, borderRadius: 8, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: C.coral }}>{Object.keys(stoppers).filter(k => Object.values(stoppers[k]).some(Boolean)).length}</div>
+                          <div style={{ fontSize: 9, color: C.muted }}>días con stoppers</div>
+                        </div>
+                      </div>
+
+                      {/* Top stoppers */}
+                      {topStoppers.length > 0 && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, color: C.red, fontWeight: 700, marginBottom: 8, letterSpacing: 1 }}>🚫 TOP STOPPERS</div>
+                          {topStoppers.map((s, i) => {
+                            const maxCount = topStoppers[0].count;
+                            return (
+                              <div key={s.id} style={{ marginBottom: 8 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                                  <span style={{ fontSize: 11, color: C.text }}>{s.label}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: C.red }}>{s.count}x</span>
+                                </div>
+                                <div style={{ height: 5, background: C.dim, borderRadius: 3, overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: `${(s.count / maxCount) * 100}%`, background: i === 0 ? C.red : i === 1 ? C.coral : C.gold, borderRadius: 3, transition: "width 0.5s" }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Hábito que más falla */}
+                      {topFailHabit && topFailHabit.fails > 0 && (
+                        <div style={{ padding: "10px 12px", background: `${C.gold}10`, border: `1px solid ${C.gold}25`, borderRadius: 8, marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, marginBottom: 4 }}>⚠️ HÁBITO MÁS DIFÍCIL</div>
+                          <div style={{ fontSize: 12, color: C.text }}>{topFailHabit.label}</div>
+                          <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Sin completar {topFailHabit.fails} {topFailHabit.fails === 1 ? "día" : "días"} de {daysWithData} registrados</div>
+                        </div>
+                      )}
+
+                      {/* Promedio diario */}
+                      {(() => {
+                        const totalChecked = Object.values(progress).reduce((sum, dayC) => sum + Object.values(dayC).filter(Boolean).length, 0);
+                        const avg = daysWithData > 0 ? (totalChecked / daysWithData).toFixed(1) : "0";
+                        return (
+                          <div style={{ padding: "10px 12px", background: `${C.teal}10`, border: `1px solid ${C.teal}25`, borderRadius: 8 }}>
+                            <div style={{ fontSize: 10, color: C.teal, fontWeight: 700, marginBottom: 2 }}>📈 PROMEDIO DIARIO</div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: C.teal }}>{avg}<span style={{ fontSize: 12, color: C.muted }}>/6 hábitos</span></div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4 }}>📅 120 Días · 9 Mar → 6 Jul 2026</div>
-              <div style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>Toca un día pasado para editar su checklist</div>
+              <div style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>Toca cualquier día pasado para ver y editar hábitos y stoppers</div>
               {["Mar", "Abr", "May", "Jun", "Jul"].map((month, mi) => {
                 const mDays = calDays.filter(d2 => d2.toLocaleString("es", { month: "short" }).toLowerCase().startsWith(month.toLowerCase()));
                 if (!mDays.length) return null;
